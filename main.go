@@ -3,20 +3,27 @@ package main
 import (
 	"context"
 	"database/sql"
-	"time"
-
+	"fmt"
 	"github.com/heroiclabs/nakama-common/runtime"
 )
 
 func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
 	// Register the RPC function.
-	initStart := time.Now()
+
+	if err := initializer.RegisterMatch(MatchModule, createMatch); err != nil {
+		return fmt.Errorf("failed to register match: %v", err)
+	}
+
+	// Register matchmaker matched callback
+	if err := initializer.RegisterMatchmakerMatched(matchmakerMatched); err != nil {
+		return err
+	}
+	return nil
 
 	err := initializer.RegisterRpc("healthcheck", RpcHealthcheck)
 	if err != nil {
 		return err
 	}
 
-	logger.Info("Module loaded in: %v", time.Since(initStart))
 	return nil
 }
