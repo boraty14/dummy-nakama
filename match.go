@@ -114,6 +114,7 @@ func (m *MatchHandler) MatchLoop(ctx context.Context, logger runtime.Logger, db 
 	// - Process the messages received.
 	// - Update the match state based on the messages and time elapsed.
 	// - Broadcast new data messages to match participants.
+	logger.Info("aaaaa")
 	return m.state
 }
 

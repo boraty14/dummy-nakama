@@ -31,6 +31,7 @@ services:
     restart: always
     links:
       - "postgres:db"
+    build: .
     depends_on:
       postgres:
         condition: service_healthy
