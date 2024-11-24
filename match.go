@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	TickRate           = 120
+	TickRate           = 5 // times in a second
 	MinPlayers         = 2
 	MaxPlayers         = 2
 	MatchmakingTimeout = 10 * time.Second
