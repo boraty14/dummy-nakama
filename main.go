@@ -18,7 +18,6 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	if err := initializer.RegisterMatchmakerMatched(matchmakerMatched); err != nil {
 		return err
 	}
-	return nil
 
 	logger.Error("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 	err := initializer.RegisterRpc("healthcheck", RpcHealthcheck)
