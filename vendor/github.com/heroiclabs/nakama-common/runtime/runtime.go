@@ -90,13 +90,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
 	"github.com/heroiclabs/nakama-common/api"
 	"github.com/heroiclabs/nakama-common/rtapi"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -172,8 +170,6 @@ var (
 
 	ErrFriendInvalidCursor = errors.New("friend cursor invalid")
 
-	ErrLeaderboardNotFound = errors.New("leaderboard not found")
-
 	ErrTournamentNotFound                = errors.New("tournament not found")
 	ErrTournamentAuthoritative           = errors.New("tournament only allows authoritative submissions")
 	ErrTournamentMaxSizeReached          = errors.New("tournament max size reached")
@@ -200,8 +196,6 @@ var (
 	ErrPartyAcceptRequest            = errors.New("party could not accept request")
 	ErrPartyRemove                   = errors.New("party could not remove")
 	ErrPartyRemoveSelf               = errors.New("party cannot remove self")
-
-	ErrGracePeriodExpired = errors.New("grace period expired")
 
 	ErrGroupNameInUse         = errors.New("group name in use")
 	ErrGroupPermissionDenied  = errors.New("group permission denied")
@@ -674,12 +668,6 @@ type Initializer interface {
 	// RegisterAfterListMatches can be used to perform additional logic after listing matches.
 	RegisterAfterListMatches(fn func(ctx context.Context, logger Logger, db *sql.DB, nk NakamaModule, out *api.MatchList, in *api.ListMatchesRequest) error) error
 
-	// RegisterBeforeMatchmakerStats is used to register a function invoked when the server receives the relevant request.
-	RegisterBeforeGetMatchmakerStats(fn func(ctx context.Context, logger Logger, db *sql.DB, nk NakamaModule) error) error
-
-	// RegisterAfterMarchmakerStats is used to register a function invoked after the server processes the relevant request.
-	RegisterAfterGetMatchmakerStats(fn func(ctx context.Context, logger Logger, db *sql.DB, nk NakamaModule, out *api.MatchmakerStats) error) error
-
 	// RegisterBeforeListNotifications can be used to perform additional logic before listing notifications for a user.
 	RegisterBeforeListNotifications(fn func(ctx context.Context, logger Logger, db *sql.DB, nk NakamaModule, in *api.ListNotificationsRequest) (*api.ListNotificationsRequest, error)) error
 
@@ -860,10 +848,10 @@ type Initializer interface {
 	// RegisterEventSessionStart can be used to define functions triggered when client sessions start.
 	RegisterEventSessionStart(fn func(ctx context.Context, logger Logger, evt *api.Event)) error
 
-	// RegisterEventSessionEnd can be used to define functions triggered when client sessions end.
+	// RegisterEventSessionStart can be used to define functions triggered when client sessions end.
 	RegisterEventSessionEnd(fn func(ctx context.Context, logger Logger, evt *api.Event)) error
 
-	// RegisterStorageIndex creates a new storage index definition and triggers an indexing process if needed.
+	// Register a new storage index.
 	RegisterStorageIndex(name, collection, key string, fields []string, sortableFields []string, maxEntries int, indexOnly bool) error
 
 	// RegisterStorageIndexFilter can be used to define a filtering function for a given storage index.
@@ -875,9 +863,6 @@ type Initializer interface {
 	// RegisterShutdown can be used to register a function that is executed once the server receives a termination signal.
 	// This function only fires if shutdown_grace_sec > 0 and will be terminated early if its execution takes longer than the configured grace seconds.
 	RegisterShutdown(fn func(ctx context.Context, logger Logger, db *sql.DB, nk NakamaModule)) error
-
-	// RegisterHttp attaches a new HTTP handler to a specified path on the main client API server endpoint.
-	RegisterHttp(pathPattern string, handler func(http.ResponseWriter, *http.Request), methods ...string) error
 }
 
 type PresenceReason uint8
@@ -960,17 +945,6 @@ type NotificationSend struct {
 type NotificationDelete struct {
 	UserID         string
 	NotificationID string
-}
-
-type Notification struct {
-	Id         string
-	UserID     string
-	Subject    string
-	Content    map[string]any
-	Code       int
-	Sender     string
-	CreateTime *timestamppb.Timestamp
-	Persistent bool
 }
 
 type WalletUpdate struct {
@@ -1106,12 +1080,9 @@ type NakamaModule interface {
 	MatchSignal(ctx context.Context, id string, data string) (string, error)
 
 	NotificationSend(ctx context.Context, userID, subject string, content map[string]interface{}, code int, sender string, persistent bool) error
-	NotificationsList(ctx context.Context, userID string, limit int, cursor string) ([]*api.Notification, string, error)
 	NotificationsSend(ctx context.Context, notifications []*NotificationSend) error
 	NotificationSendAll(ctx context.Context, subject string, content map[string]interface{}, code int, persistent bool) error
 	NotificationsDelete(ctx context.Context, notifications []*NotificationDelete) error
-	NotificationsGetId(ctx context.Context, userID string, ids []string) ([]*Notification, error)
-	NotificationsDeleteId(ctx context.Context, userID string, ids []string) error
 
 	WalletUpdate(ctx context.Context, userID string, changeset map[string]int64, metadata map[string]interface{}, updateLedger bool) (updated map[string]int64, previous map[string]int64, err error)
 	WalletsUpdate(ctx context.Context, updates []*WalletUpdate, updateLedger bool) ([]*WalletUpdateResult, error)
@@ -1122,14 +1093,13 @@ type NakamaModule interface {
 	StorageRead(ctx context.Context, reads []*StorageRead) ([]*api.StorageObject, error)
 	StorageWrite(ctx context.Context, writes []*StorageWrite) ([]*api.StorageObjectAck, error)
 	StorageDelete(ctx context.Context, deletes []*StorageDelete) error
-	StorageIndexList(ctx context.Context, callerID, indexName, query string, limit int, order []string, cursor string) (*api.StorageObjects, string, error)
+	StorageIndexList(ctx context.Context, callerID, indexName, query string, limit int, order []string) (*api.StorageObjects, error)
 
 	MultiUpdate(ctx context.Context, accountUpdates []*AccountUpdate, storageWrites []*StorageWrite, storageDeletes []*StorageDelete, walletUpdates []*WalletUpdate, updateLedger bool) ([]*api.StorageObjectAck, []*WalletUpdateResult, error)
 
-	LeaderboardCreate(ctx context.Context, id string, authoritative bool, sortOrder, operator, resetSchedule string, metadata map[string]interface{}, enableRanks bool) error
+	LeaderboardCreate(ctx context.Context, id string, authoritative bool, sortOrder, operator, resetSchedule string, metadata map[string]interface{}) error
 	LeaderboardDelete(ctx context.Context, id string) error
 	LeaderboardList(limit int, cursor string) (*api.LeaderboardList, error)
-	LeaderboardRanksDisable(ctx context.Context, id string) error
 	LeaderboardRecordsList(ctx context.Context, id string, ownerIDs []string, limit int, cursor string, expiry int64) (records []*api.LeaderboardRecord, ownerRecords []*api.LeaderboardRecord, nextCursor string, prevCursor string, err error)
 	LeaderboardRecordsListCursorFromRank(id string, rank, overrideExpiry int64) (string, error)
 	LeaderboardRecordWrite(ctx context.Context, id, ownerID, username string, score, subscore int64, metadata map[string]interface{}, overrideOperator *int) (*api.LeaderboardRecord, error)
@@ -1155,13 +1125,12 @@ type NakamaModule interface {
 	SubscriptionsList(ctx context.Context, userID string, limit int, cursor string) (*api.SubscriptionList, error)
 	SubscriptionGetByProductId(ctx context.Context, userID, productID string) (*api.ValidatedSubscription, error)
 
-	TournamentCreate(ctx context.Context, id string, authoritative bool, sortOrder, operator, resetSchedule string, metadata map[string]interface{}, title, description string, category, startTime, endTime, duration, maxSize, maxNumScore int, joinRequired, enableRanks bool) error
+	TournamentCreate(ctx context.Context, id string, authoritative bool, sortOrder, operator, resetSchedule string, metadata map[string]interface{}, title, description string, category, startTime, endTime, duration, maxSize, maxNumScore int, joinRequired bool) error
 	TournamentDelete(ctx context.Context, id string) error
 	TournamentAddAttempt(ctx context.Context, id, ownerID string, count int) error
 	TournamentJoin(ctx context.Context, id, ownerID, username string) error
 	TournamentsGetId(ctx context.Context, tournamentIDs []string) ([]*api.Tournament, error)
 	TournamentList(ctx context.Context, categoryStart, categoryEnd, startTime, endTime, limit int, cursor string) (*api.TournamentList, error)
-	TournamentRanksDisable(ctx context.Context, id string) error
 	TournamentRecordsList(ctx context.Context, tournamentId string, ownerIDs []string, limit int, cursor string, overrideExpiry int64) (records []*api.LeaderboardRecord, ownerRecords []*api.LeaderboardRecord, prevCursor string, nextCursor string, err error)
 	TournamentRecordWrite(ctx context.Context, id, ownerID, username string, score, subscore int64, metadata map[string]interface{}, operatorOverride *int) (*api.LeaderboardRecord, error)
 	TournamentRecordDelete(ctx context.Context, id, ownerID string) error
@@ -1316,16 +1285,13 @@ type FleetManagerInitializer interface {
 Satori runtime integration definitions.
 */
 type Satori interface {
-	Authenticate(ctx context.Context, id string, defaultProperties, customProperties map[string]string, ipAddress ...string) error
+	Authenticate(ctx context.Context, id string, ipAddress ...string) error
 	PropertiesGet(ctx context.Context, id string) (*Properties, error)
 	PropertiesUpdate(ctx context.Context, id string, properties *PropertiesUpdate) error
 	EventsPublish(ctx context.Context, id string, events []*Event) error
 	ExperimentsList(ctx context.Context, id string, names ...string) (*ExperimentList, error)
 	FlagsList(ctx context.Context, id string, names ...string) (*FlagList, error)
 	LiveEventsList(ctx context.Context, id string, names ...string) (*LiveEventList, error)
-	MessagesList(ctx context.Context, id string, limit int, forward bool, cursor string) (*MessageList, error)
-	MessageUpdate(ctx context.Context, id, messageId string, readTime, consumeTime int64) error
-	MessageDelete(ctx context.Context, id, messageId string) error
 }
 
 type Properties struct {
@@ -1381,35 +1347,4 @@ type LiveEvent struct {
 	Value              string `json:"value,omitempty"`
 	ActiveStartTimeSec int64  `json:"active_start_time_sec,string,omitempty"`
 	ActiveEndTimeSec   int64  `json:"active_end_time_sec,string,omitempty"`
-	Id                 string `json:"id,omitempty"`
-	StartTimeSec       int64  `json:"start_time_sec,string,omitempty"`
-	EndTimeSec         int64  `json:"end_time_sec,string,omitempty"`
-	DurationSec        int64  `json:"duration_sec,string,omitempty"`
-	ResetCronExpr      string `json:"reset_cron,omitempty"`
-}
-
-type MessageList struct {
-	Messages        []*Message `json:"messages,omitempty"`
-	NextCursor      string     `json:"next_cursor,omitempty"`
-	PrevCursor      string     `json:"prev_cursor,omitempty"`
-	CacheableCursor string     `json:"cacheable_cursor,omitempty"`
-}
-
-type Message struct {
-	ScheduleId  string         `json:"schedule_id,omitempty"`
-	SendTime    int64          `json:"send_time,string,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
-	CreateTime  int64          `json:"create_time,string,omitempty"`
-	UpdateTime  int64          `json:"update_time,string,omitempty"`
-	ReadTime    int64          `json:"read_time,string,omitempty"`
-	ConsumeTime int64          `json:"consume_time,string,omitempty"`
-	Text        string         `json:"text,omitempty"`
-	Id          string         `json:"id,omitempty"`
-	Title       string         `json:"title,omitempty"`
-	ImageUrl    string         `json:"image_url,omitempty"`
-}
-
-type MessageUpdate struct {
-	ReadTime    int64 `json:"read_time,omitempty"`
-	ConsumeTime int64 `json:"consume_time,omitempty"`
 }

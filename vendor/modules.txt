@@ -1,4 +1,4 @@
-# github.com/heroiclabs/nakama-common v1.34.0
+# github.com/heroiclabs/nakama-common v1.32.0
 ## explicit; go 1.19
 github.com/heroiclabs/nakama-common/api
 github.com/heroiclabs/nakama-common/rtapi
