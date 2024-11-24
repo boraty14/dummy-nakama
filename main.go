@@ -20,6 +20,7 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 	}
 	return nil
 
+	logger.Error("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 	err := initializer.RegisterRpc("healthcheck", RpcHealthcheck)
 	if err != nil {
 		return err
