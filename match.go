@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	TickRate           = 20
+	TickRate           = 120
 	MinPlayers         = 2
 	MaxPlayers         = 2
 	MatchmakingTimeout = 10 * time.Second
@@ -78,6 +78,7 @@ func (m *MatchHandler) MatchInit(ctx context.Context, logger runtime.Logger, db 
 
 	// Add initial players from matchmaker
 	if entries, ok := params["matchmaker_entries"].([]runtime.MatchmakerEntry); ok {
+		logger.Info("Number of entries: %d", len(entries))
 		for _, entry := range entries {
 			m.state.Players[entry.GetPresence().GetUserId()] = entry.GetPresence()
 		}
@@ -90,16 +91,22 @@ func (m *MatchHandler) MatchJoinAttempt(ctx context.Context, logger runtime.Logg
 	result := true
 
 	// Custom code to process match join attempt.
-	return state, result, ""
+	return m.state, result, ""
 }
 
 func (m *MatchHandler) MatchJoin(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
-	return state
+	for _, entry := range presences {
+		m.state.Players[entry.GetUserId()] = entry
+	}
+	return m.state
 }
 
 func (m *MatchHandler) MatchLeave(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presences []runtime.Presence) interface{} {
 	// Custom code to handle a disconnected/leaving user.
-	return state
+	for _, entry := range presences {
+		delete(m.state.Players, entry.GetUserId())
+	}
+	return m.state
 }
 
 func (m *MatchHandler) MatchLoop(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, messages []runtime.MatchData) interface{} {
@@ -107,14 +114,14 @@ func (m *MatchHandler) MatchLoop(ctx context.Context, logger runtime.Logger, db 
 	// - Process the messages received.
 	// - Update the match state based on the messages and time elapsed.
 	// - Broadcast new data messages to match participants.
-	return state
+	return m.state
 }
 
 func (m *MatchHandler) MatchTerminate(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, graceSeconds int) interface{} {
 	// Custom code to process the termination of match.
-	return state
+	return m.state
 }
 
 func (m *MatchHandler) MatchSignal(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, data string) (interface{}, string) {
-	return state, "signal received: " + data
+	return m.state, "signal received: " + data
 }
